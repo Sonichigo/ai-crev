@@ -1,0 +1,27 @@
+{
+  "name": "code-review-cli",
+  "version": "1.0.1",
+  "description": "A CLI tool for automatic code review",
+  "main": "index.js",
+  "bin": {
+    "crev": "dist/index.js"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "babel src -d dist"
+  },
+  "keywords": [],
+  "author": "Sonichigo",
+  "license": "MIT",
+  "dependencies": {
+    "babel": "^6.23.0",
+    "commander": "^12.0.0",
+    "eslint": "^8.57.0",
+    "eslint-config-airbnb-base": "^15.0.0",
+    "eslint-plugin-import": "^2.29.1",
+    "openai": "^4.46.1"
+  },
+  "devDependencies": {
+    "babel-cli": "^6.26.0"
+  }
+}
