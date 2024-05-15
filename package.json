@@ -1,14 +1,13 @@
 {
   "name": "code-review-cli",
-  "version": "1.0.1",
+  "version": "1.0.8-alpha2",
   "description": "A CLI tool for automatic code review",
   "main": "index.js",
   "bin": {
-    "crev": "dist/index.js"
+    "crev": "src/index.js"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "babel src -d dist"
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [
     "cli","code review"

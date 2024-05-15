@@ -3,62 +3,75 @@
 const fs = require('fs');
 const path = require('path');
 const { program } = require('commander');
-const { CLIEngine } = require('eslint');
+const { ESLint } = require('eslint');
 const { spawn } = require('child_process');
-const { lintGo } = require('./lint-go');
+const packageJson = require('../package.json');
+const lintGo = require('./lint-go.js')
 
 program
-  .option('-p, --path <path>', 'Path to the file or directory to review', './')
+  .version(packageJson.version, '-v, --version')
+  .option('-p, --path <path>', 'Path to the file or directory to review')
   .option('-k, --key <key>', 'OpenAI API key for GPT-3 analysis')
-  .parse(process.argv);
+  .helpOption('-h, --help', 'Display help for command');
+
+program.parse(process.argv);
 
 const options = program.opts();
 
 const file = path.resolve(options.path);
 const isDirectory = fs.lstatSync(file).isDirectory();
-const fileExtension = path.extname(file).substring(1);
 
 let language;
-switch (fileExtension) {
-  case 'js':
-  case 'jsx':
-    language = 'js';
-    break;
-  case 'py':
-    language = 'py';
-    break;
-  case 'go':
-    language = 'go';
-    break;
-  default:
-    console.error(`Unsupported file extension: ${fileExtension}`);
-    process.exit(1);
+
+if (isDirectory) {
+  // If it's a directory, assume all supported files are present
+  language = 'all';
+} else {
+  // If it's a file, check the file extension
+  const fileExtension = path.extname(file).substring(1);
+
+  switch (fileExtension) {
+    case 'js':
+    case 'jsx':
+      language = 'js';
+      break;
+    case 'py':
+      language = 'py';
+      break;
+    case 'go':
+      language = 'go';
+      break;
+    default:
+      console.error(`Unsupported file extension: ${fileExtension}`);
+      process.exit(1);
+  }
 }
 
 switch (language) {
   case 'js':
-    const cli = new CLIEngine({
-      envs: ['node', 'es6'],
-      useEslintrc: false,
-      baseConfig: {
+    const cli = new ESLint({
+      overrideConfigFile: null,
+      overrideConfig: {
+        env: {
+          node: true,
+          es6: true,
+        },
         extends: ['airbnb-base'],
         plugins: ['import'],
       },
     });
     if (isDirectory) {
-      cli.lintFiles(file).then(async (report) => {
-        console.log(cli.getFormatter('stylish')(report.results));
-        const code = report.results.map(result => result.source).join('\n\n');
+      cli.lintFiles(file).then(async (results) => {
+        const formatter = await cli.loadFormatter('stylish');
+        console.log(formatter.formatResults(results));
         if (options.key) {
+          const code = results.flatMap(result => result.source).join('\n\n');
           const gpt3Analysis = await analyzeCodeWithGPT3(code, 'JavaScript', options.key);
           console.log('\nGPT-3 Analysis:\n', gpt3Analysis);
         }
       });
     } else {
-      analyzeAndPrintGPT3Analysis(file, 'JavaScript', options.key, () => {
-        const report = cli.executeOnText(fs.readFileSync(file, 'utf8'), file);
-        console.log(cli.getFormatter('stylish')(report.results));
-      });
+      lintFileAndPrintGPT3Analysis(file, cli, options.key);
     }
     break;
 
@@ -74,10 +87,7 @@ switch (language) {
         }
       });
     } else {
-      analyzeAndPrintGPT3Analysis(file, 'JavaScript', options.key, () => {
-        const report = cli.executeOnText(fs.readFileSync(file, 'utf8'), file);
-        console.log(cli.getFormatter('stylish')(report.results));
-      });
+      lintFileAndPrintGPT3Analysis(file, cli, options.key);
     }
     break;
 
@@ -93,13 +103,10 @@ switch (language) {
         }
       });
     } else {
-      analyzeAndPrintGPT3Analysis(file, 'JavaScript', options.key, () => {
-        const report = cli.executeOnText(fs.readFileSync(file, 'utf8'), file);
-        console.log(cli.getFormatter('stylish')(report.results));
-      });
+      lintFileAndPrintGPT3Analysis(file, cli, options.key);
     }
     break;
-}
+  }
 
 function lintPython(file, isDirectory) {
   const pylint = spawn('pylint', [
@@ -120,22 +127,14 @@ function lintPython(file, isDirectory) {
     }
   });
 }
-async function analyzeCodeWithGPT3(code, language, apiKey) {
-    const configuration = new Configuration({
-      apiKey: apiKey,
-    });
-    const openai = new OpenAIApi(configuration);
-  
-    const prompt = `Analyze the following ${language} code and provide feedback on potential errors, issues, or areas for improvement:\n\n${code}`;
-  
-    const response = await openai.createCompletion({
-      model: "text-davinci-003",
-      prompt,
-      max_tokens: 1024,
-      n: 1,
-      stop: null,
-      temperature: 0.7,
-    });
-  
-    return response.data.choices[0].text.trim();
+
+async function lintFileAndPrintGPT3Analysis(file, cli, apiKey) {
+  const code = fs.readFileSync(file, 'utf8');
+  const results = await cli.lintText(code, { filePath: file });
+  const formatter = await cli.loadFormatter('stylish');
+  console.log(formatter.formatResults([results]));
+  if (apiKey) {
+    const gpt3Analysis = await analyzeCodeWithGPT3(code, 'JavaScript', apiKey);
+    console.log('\nGPT-3 Analysis:\n', gpt3Analysis);
   }
+}
